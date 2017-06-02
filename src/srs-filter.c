@@ -39,6 +39,7 @@ static int CONFIG_verbose = 0;
 static int CONFIG_forward = 0;
 static int CONFIG_reverse = 0;
 static char *CONFIG_socket = NULL;
+static char *CONFIG_pidfile = NULL;
 static char **CONFIG_domains = NULL;
 static int CONFIG_spf_check = 0;
 static char *CONFIG_spf_heloname = NULL;
@@ -669,6 +670,7 @@ static struct smfiDesc smfilter = {
 
 void daemonize() {
   pid_t pid, sid;
+  FILE *f;
 
   /* Fork off the parent process */
   pid = fork();
@@ -687,6 +689,11 @@ void daemonize() {
   umask(0);
 
   /* Open any logs here */
+  if (CONFIG_pidfile) {
+     f = fopen(CONFIG_pidfile, "w");
+     fprintf(f, "%i", (int) getpid());
+     fclose(f);
+  }
 
   /* Create a new SID for the child process */
   sid = setsid();
@@ -770,7 +777,6 @@ int main(int argc, char* argv[]) {
   int c, i;
   int debug_flag = 0;
   char *address = NULL;
-  FILE *f;
 
   while (1) {
     static struct option long_options[] = {
@@ -837,9 +843,7 @@ int main(int argc, char* argv[]) {
         break;
 
       case 'P':
-        f = fopen(optarg, "w");
-        fprintf(f, "%i", (int) getpid());
-        fclose(f);
+	CONFIG_pidfile = optarg;
         break;
 
       case 's':
