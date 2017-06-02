@@ -236,7 +236,12 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
     syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\")",
            cd->num, cd->state, argv[0]);
 
-  if (strlen(argv[0]) < 1 || strcmp(argv[0], "<>") == 0 || argv[0][0] != '<' || argv[0][strlen(argv[0])-1] != '>' || !strchr(argv[0], '@')) {
+  if (strlen(argv[0]) > 0 && strcmp(argv[0], "<>") == 0) {
+    // accept NULL sender
+    return SMFIS_CONTINUE;
+  }
+
+  if (strlen(argv[0]) < 1 || argv[0][0] != '<' || argv[0][strlen(argv[0])-1] != '>' || !strchr(argv[0], '@')) {
     cd->state |= SS_STATE_INVALID_MSG;
     if (CONFIG_verbose)
       syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): skipping \"MAIL FROM: %s\"",
@@ -564,10 +569,18 @@ xxfi_srs_milter_eom(SMFICTX* ctx) {
         free(out);
     }
 
+    char *rp;
+
     if (CONFIG_reverse && cd->recip) {
       // modify RCPT TO: by removing SRS format
       for (i = 0; cd->recip[i]; i++) {
-        if ((srs_res = srs_reverse_alloc(td->srs, &out, cd->recip[i])) == SRS_SUCCESS) {
+        // Does the recipient address start with < ? Then move rp one byte ahead to the actual email address.
+        if (strlen(cd->recip[i]) > 0 && cd->recip[i][0] == '<') {
+          rp = cd->recip[i] + 1;
+        } else {
+          rp = cd->recip[i];
+        }
+        if ((srs_res = srs_reverse_alloc(td->srs, &out, rp)) == SRS_SUCCESS) {
           if (smfi_delrcpt(ctx, cd->recip[i]) != MI_SUCCESS) {
             syslog(LOG_ERR, "conn# %d[%i][%s] - xxfi_srs_milter_eom(): smfi_delrcpt(ctx, %s) failed",
                    cd->num, cd->state, queue_id, cd->recip[i]);
