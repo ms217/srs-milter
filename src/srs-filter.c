@@ -898,7 +898,7 @@ int main(int argc, char* argv[]) {
           char *err = srs_milter_load_file_secrets(&CONFIG_srs_secrets, optarg);
           if (err) {
             usage(argv[0]);
-            fprintf(stderr, err);
+            fprintf(stderr, "%s", err);
             exit(EXIT_FAILURE);
           }
         }
