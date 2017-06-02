@@ -1,5 +1,5 @@
-SRS milter plugin for postfix
-=============================
+SRS milter plugin for postfix and sendmail
+==========================================
 
 This milter implemets SRS (Sender Rewriting Scheme) that can be used to fix envelope MAIL FROM for forwarded mails protected by SPF. It can be configured in two modes for:
 
@@ -18,7 +18,7 @@ It has been updated and tweaked by emsearcy and Driskell and distributed via Git
 Dependencies
 ------------
 
-* postfix 2.5 -- supports SMFIF_CHGFROM
+* postfix 2.5 or sendmail 8.14 -- supports SMFIF_CHGFROM
 * libmilter -- compatible with sendmail 8.14.0 and higher
 * libspf2 -- to be able to rewrite only outgoing addresses that can be rejected by SPF checks on final MTA
 * libsrs2 -- for SRS address rewriting
@@ -53,6 +53,13 @@ Incomming mail:
   @srsdomain.com -
   ```
 
+* Configure sendmail to use the milter in your mc file
+  ```
+  INPUT_MAIL_FILTER(`milter-srs', `S=inet:10044@localhost, F=T, T=S:360s;R:360s;E:15m')dnl
+  ```
+
+* NOTE: you don't need any other configuration in sendmail if you use the milter in forward mode.
+
 Outgoing mail:
 
 * Start srs-milter in forward mode
@@ -70,6 +77,14 @@ Outgoing mail:
   ```
 
 * NOTE: If you use virtual_alias_maps for outgoing mails to change recipient address you can't use same smtpd with srs-milter (it doesn't see changes from rewriting virtual aliases). In main.cf you can define new smtpd that listens on different port and forward all outgoing mails throught this smtpd configured with srs-milter.
+
+* Configure sendmail to use the milter in your mc file
+  ```
+  INPUT_MAIL_FILTER(`milter-srs', `S=inet:10044@localhost, F=T, T=S:360s;R:360s;E:15m')dnl
+  ```
+
+* NOTE: You need to make sure sendmail accepts the SRS address as a valid address. You can achieve this by
+  allowing relay access to your SRS domain in /etc/mail/access for example.
 
 Other notes
 -----------
