@@ -239,6 +239,7 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
 
   if (strlen(argv[0]) > 0 && strcmp(argv[0], "<>") == 0) {
     // accept NULL sender
+    cd->state |= SS_STATE_INVALID_MSG;
     return SMFIS_CONTINUE;
   }
 
