@@ -489,6 +489,11 @@ xxfi_srs_milter_eom(SMFICTX* ctx) {
     }
   }
 
+  // Handle NULL senders (bounces)
+  if (!cd->sender) {
+     fix_envfrom = 0;
+  }
+
   // debug log gathered data...
   if (CONFIG_verbose) {
     int i = 0;
