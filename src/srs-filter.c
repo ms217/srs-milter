@@ -381,6 +381,30 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
     return SMFIS_CONTINUE;
   }
 
+  // Check if this message was delivered to us via SMTP AUTH. We assume we don't rewrite such messages.
+  char *auth_authen = smfi_getsymval(ctx, "{auth_authen}");
+  if(auth_authen) {
+    cd->state |= SS_STATE_INVALID_MSG;
+    if (CONFIG_verbose)
+      syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): skipping SMTP AUTH user: %s",
+             cd->num, cd->state, argv[0], auth_authen);
+    return SMFIS_CONTINUE;
+  }
+
+  // Check if this message was delivered from the local host. We don't rewrite such messages.
+  char *if_addr = smfi_getsymval(ctx, "{if_addr}");
+  if(strcmp(if_addr, "127.0.0.1") == 0 || strcmp(if_addr, "IPv6:::1") == 0) {
+    cd->state |= SS_STATE_INVALID_MSG;
+    if (CONFIG_verbose)
+      syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): skipping message originating from %s",
+             cd->num, cd->state, argv[0], if_addr);
+    return SMFIS_CONTINUE;
+  } else {
+      syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): accepting message originating from %s",
+             cd->num, cd->state, argv[0], if_addr);
+  }
+
+
   // cleanup data structure for new message
   // (there can be more messages send throught one connection,
   // so this structure could be filled by previous message)
