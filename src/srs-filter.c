@@ -1020,43 +1020,43 @@ int main(int argc, char* argv[]) {
         break;
 
       case 'k':
-        srs_milter_configure("spf_check", NULL);
+        srs_milter_configure("spf-check", NULL);
         break;
 
       case 'c':
-        srs_milter_configure("spf_secret", optarg);
+        srs_milter_configure("spf-secret", optarg);
         break;
 
       case 'l':
-        srs_milter_configure("spf_heloname", optarg);
+        srs_milter_configure("spf-heloname", optarg);
         break;
 
       case 'a':
-        srs_milter_configure("spf_address", optarg);
+        srs_milter_configure("spf-address", optarg);
         break;
 
       case 'o':
-        srs_milter_configure("srs_domain", optarg);
+        srs_milter_configure("srs-domain", optarg);
         break;
 
       case 'w':
-        srs_milter_configure("srs_alwaysrewrite", NULL);
+        srs_milter_configure("srs-alwaysrewrite", NULL);
         break;
 
       case 'g':
-        srs_milter_configure("srs_hashlength", optarg);
+        srs_milter_configure("srs-hashlength", optarg);
         break;
 
       case 'i':
-        srs_milter_configure("srs_hashmin", optarg);
+        srs_milter_configure("srs-hashmin", optarg);
         break;
 
       case 'x':
-        srs_milter_configure("srs_maxage", optarg);
+        srs_milter_configure("srs-maxage", optarg);
         break;
 
       case 'e':
-        srs_milter_configure("srs_separator", optarg);
+        srs_milter_configure("srs-separator", optarg);
         break;
 
       case '?':
