@@ -300,7 +300,7 @@ static void srs_milter_thread_data_destructor(void* data) {
 
 
 
-// https://www.milter.org/developers/api/xxfi_connect
+// called once, at the start of each SMTP connection.
 static sfsistat
 xxfi_srs_milter_connect(SMFICTX* ctx, char *hostname, _SOCK_ADDR *hostaddr) {
   struct srs_milter_thread_data* td;
@@ -359,7 +359,8 @@ xxfi_srs_milter_connect(SMFICTX* ctx, char *hostname, _SOCK_ADDR *hostaddr) {
 
 
 
-// https://www.milter.org/developers/api/xxfi_envfrom
+// Handle the envelope FROM command - called once at the beginning
+// of each message, before xxfi_envrcpt
 static sfsistat
 xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
   struct srs_milter_connection_data* cd =
@@ -415,7 +416,8 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
 
 
 
-// https://www.milter.org/developers/api/xxfi_envrcpt
+// Handle the envelope RCPT command - called once per recipient,
+// hence one or more times per message, immediately after xxfi_envfrom
 static sfsistat
 xxfi_srs_milter_envrcpt(SMFICTX* ctx, char** argv) {
   struct srs_milter_connection_data* cd =
@@ -475,7 +477,7 @@ xxfi_srs_milter_envrcpt(SMFICTX* ctx, char** argv) {
 
 
 
-// https://www.milter.org/developers/api/xxfi_eom
+// End of a message - called once after all calls to xxfi_body for a given message
 static sfsistat
 xxfi_srs_milter_eom(SMFICTX* ctx) {
   struct srs_milter_connection_data* cd =
@@ -707,7 +709,7 @@ xxfi_srs_milter_eom(SMFICTX* ctx) {
 
 
 
-// https://www.milter.org/developers/api/xxfi_close
+//  The current connection is being closed - called once at the end of each connection
 static sfsistat
 xxfi_srs_milter_close(SMFICTX* ctx) {
   struct srs_milter_connection_data* cd =
@@ -821,7 +823,7 @@ void usage(char *argv0) {
   printf("      verbose output\n");
   printf("  -d, --daemon\n");
   printf("      daemonize this process\n");
-  printf("  -C, --config\n");
+  printf("  -c, --config\n");
   printf("      configuration file (use long variant of command line options)\n");
   printf("  -P, --pidfile\n");
   printf("      filename where to store process PID\n");
@@ -840,11 +842,11 @@ void usage(char *argv0) {
   printf("      starting domain name with \".\" match also all subdomains\n");
   printf("  -o, --srs-domain\n");
   printf("      our SRS domain name\n");
-  printf("  -c, --srs-secret\n");
+  printf("  -y, --srs-secret\n");
   printf("      secret string for SRS hashing algorithm\n");
   printf("      WARNING: this is NOT secure, it is recommended to use --srs-secret-file\n");
   printf("               instead to ensure secrets are not visible in process listings\n");
-  printf("  -C, --srs-secret-file\n");
+  printf("  -Y, --srs-secret-file\n");
   printf("      file containing secrets for SRS hashing algorithm\n");
   printf("  -w, --srs-alwaysrewrite\n");
   printf("  -g, --srs-hashlength\n");
@@ -853,7 +855,7 @@ void usage(char *argv0) {
   printf("  -e, --srs-separator\n");
   printf("      SRS address separator, must be one of '+' '-' '=' (default: libsrs2 default)\n");
   printf("  -k, --spf-check\n");
-  printf("      use SRS only when sender's SPF record will (soft)fail us\n");
+  printf("      use SRS only if sender domain use SPF that can fail (default: false)\n");
   printf("  -l, --spf-heloname\n");
   printf("      use this heloname for SPF checks (default: gethostname())\n");
   printf("  -a, --spf-address\n");
@@ -867,7 +869,6 @@ void usage(char *argv0) {
 int main(int argc, char* argv[]) {
   int c, i;
   int daemon = 0;
-  FILE *f;
 
   static struct option long_options[] = {
     /* These options set a flag. */
@@ -878,7 +879,7 @@ int main(int argc, char* argv[]) {
     {"help",                   no_argument,       0, 'h'},
     {"verbose",                no_argument,       0, 'v'},
     {"daemon",                 no_argument,       0, 'd'},
-    {"config",                 required_argument, 0, 'C'},
+    {"config",                 required_argument, 0, 'c'},
     {"pidfile",                required_argument, 0, 'P'},
     {"socket",                 required_argument, 0, 's'},
     {"timeout",                required_argument, 0, 't'},
@@ -889,9 +890,8 @@ int main(int argc, char* argv[]) {
     {"spf-heloname",           required_argument, 0, 'l'},
     {"spf-address",            required_argument, 0, 'a'},
     {"srs-domain",             required_argument, 0, 'o'},
-    {"srs-always",             no_argument,       0, 'y'},
-    {"srs-secret",             required_argument, 0, 'c'},
-    {"srs-secret-file",        required_argument, 0, 'C'},
+    {"srs-secret",             required_argument, 0, 'y'},
+    {"srs-secret-file",        required_argument, 0, 'Y'},
     {"srs-alwaysrewrite",      no_argument,       0, 'w'},
     {"srs-hashlength",         required_argument, 0, 'g'},
     {"srs-hashmin",            required_argument, 0, 'i'},
@@ -908,14 +908,14 @@ int main(int argc, char* argv[]) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "hdvP:s:t:f:r:mk:t:l:a:o:yc:C:wg:i:x:e:",
+    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:kl:a:o:y:Y:wg:i:x:e:",
                     long_options, &option_index);
 
     /* Detect the end of the options. */
     if (c == -1)
       break;
 
-    if (c != 'C')
+    if (c != 'c')
       continue;
 
     if (srs_milter_load_config(optarg) != 0)
@@ -929,7 +929,7 @@ int main(int argc, char* argv[]) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "hdvP:s:t:f:r:mk:t:l:a:o:yc:C:wg:i:x:e:",
+    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:kl:a:o:y:Y:wg:i:x:e:",
                     long_options, &option_index);
 
     /* Detect the end of the options. */
@@ -952,15 +952,15 @@ int main(int argc, char* argv[]) {
         exit(EXIT_SUCCESS);
         break;
 
-      case 'd':
-        daemon = 1;
-        break;
-
       case 'v':
         srs_milter_configure("verbose", NULL);
         break;
 
-      case 'C':
+      case 'd':
+        daemon = 1;
+        break;
+
+      case 'c':
         break;
 
       case 'P':
@@ -991,10 +991,6 @@ int main(int argc, char* argv[]) {
         srs_milter_configure("spf-check", NULL);
         break;
 
-      case 'c':
-        srs_milter_configure("spf-secret", optarg);
-        break;
-
       case 'l':
         srs_milter_configure("spf-heloname", optarg);
         break;
@@ -1005,6 +1001,14 @@ int main(int argc, char* argv[]) {
 
       case 'o':
         srs_milter_configure("srs-domain", optarg);
+        break;
+
+      case 'y':
+        srs_milter_configure("srs-secret", optarg);
+        break;
+
+      case 'Y':
+        srs_milter_configure("srs-secret-file", optarg);
         break;
 
       case 'w':
@@ -1225,7 +1229,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (config.pidfile) {
-    f = fopen(config.pidfile, "w");
+    FILE *f = fopen(config.pidfile, "w");
     if (!f) {
       fprintf(stderr, "ERROR: can't open PID file %s\n", config.pidfile);
       exit(EXIT_FAILURE);

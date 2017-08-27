@@ -21,10 +21,14 @@ Both libraries contain several patches that are not part of official source code
 Installation
 ------------
 
-### Building sources
+### Building srs-milter from sources
 
 * clone github srs-milter repository
-* compile source in `src` subdirectory using `make` command
+  ```
+  git clone https://github.com/vokac/srs-milter
+  ```
+* instlall libspf2, libsrs2 and libmilter devel packages
+* compile sources with `cmake` in base directory (or just `make` in source directory)
 * startup script/unit available in `dist` subdirectory
 
 ### RPM packages
@@ -34,7 +38,33 @@ Source and binary packages for RHEL/CentOS/Fedora available in repositories at h
 Configuration
 -------------
 
-Incomming mail:
+### Command line arguments and configuration file
+
+You can specify configuration options as command line arguments or in a configuration file. List of all available parameters can be obtained executing `srs-filter --help`. Configuration files supports only long version of the command line arguments and these commands starts `srs-filter` daemon with same configuration:
+
+```
+# use command line arguments to configure srs-filter
+srs-filter --verbose --daemon --socket=inet:1234@localhost --reverse --forward \
+      --local-domain=example.com --srs-domain=srs.example.com --srs-secret=secret
+```
+
+```
+# use config file to configure srs-filter
+srs-filter --config=/etc/srs-milter.conf
+# content of the configuration file /etc/srs-milter.conf
+verbose
+daemon
+socket=inet:1234@localhost
+reverse
+forward
+local-domain=example.com
+srs-domain=srs.example.com
+srs-secret=secret
+```
+
+
+
+### Incomming mail:
 
 * Start srs-milter in reverse mode
   ```
@@ -65,7 +95,7 @@ Incomming mail:
 
 * NOTE: you don't need any other configuration in sendmail if you use the milter in forward mode.
 
-Outgoing mail:
+### Outgoing mail:
 
 * Start srs-milter in forward mode
   ```
@@ -113,8 +143,9 @@ Systemd (service configuration via /etc/srs-milter.*.conf files):
 Other notes
 -----------
 
-From http://kmlinux.fjfi.cvut.cz/~vokacpet/:
-I use this milter on low traffic site (~ 30k mails a day) without problems (currently ~ 500k mails in reverse mode and ~ 50k mails in forward mode). But still it is basically quick hack for my current needs and the code is far from being nice and clean.
+Unfortunatelly it is neccessary to have some basic understanding how SPF/SRS works to be able to configure and plug this milter in your mailserver configuration.
+
+Althought original code was just quick hack to fix mail forwarding to sites that started to force SPF validation and the source code is not always perfectly readable it seems to be pretty stable.
 
 Contributors
 ------------
