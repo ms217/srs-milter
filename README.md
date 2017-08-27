@@ -3,17 +3,10 @@ SRS milter plugin for postfix and sendmail
 
 This milter implemets SRS (Sender Rewriting Scheme) that can be used to fix envelope MAIL FROM for forwarded mails protected by SPF. It can be configured in two modes for:
 
-* Incoming mail -- rewrite RCPT TO addresses in SRS format back
-* Outgoing mail -- rewrite MAIL FROM address to SRS format
+* Incoming mail - rewrite RCPT TO addresses in SRS format back
+* Outgoing mail - rewrite MAIL FROM address to SRS format
 
-
-Download
---------
-
-The original source of srs-milter can be found here: http://kmlinux.fjfi.cvut.cz/~vokacpet/activities/srs-milter/
-
-It has been updated and tweaked by emsearcy and Driskell and distributed via GitHub.
-
+SRS secrets can be provided securely inside a file. For quick testing and backwards compatibility with old configurations, they can still be provided insecurely on the command line.
 
 Dependencies
 ------------
@@ -25,6 +18,18 @@ Dependencies
 
 Both libraries contain several patches that are not part of official source code but comes from different distributions (debian, freebsd).
 
+Installation
+------------
+
+### Building sources
+
+* clone github srs-milter repository
+* compile source in `src` subdirectory using `make` command
+* startup script/unit available in `dist` subdirectory
+
+### RPM packages
+
+Source and binary packages for RHEL/CentOS/Fedora available in repositories at http://copr.fedoraproject.org/coprs/vokac/srs-milter/
 
 Configuration
 -------------
@@ -86,8 +91,34 @@ Outgoing mail:
 * NOTE: You need to make sure sendmail accepts the SRS address as a valid address. You can achieve this by
   allowing relay access to your SRS domain in /etc/mail/access for example.
 
+Service startup
+---------------
+
+SysV initscript (service configuration via /etc/sysconfig/srs-milter):
+  ```
+  # enable srs-milter service
+  /sbin/chkconfig srs-milter on
+  # start srs-milter service
+  /sbin/service srs-milter start
+  ```
+
+Systemd (service configuration via /etc/srs-milter.*.conf files):
+  ```
+  # enable srs-milter service
+  systemctl enable srs-milter@default
+  # start srs-milter service
+  systemctl start srs-milter@default
+  ```
+
 Other notes
 -----------
 
 From http://kmlinux.fjfi.cvut.cz/~vokacpet/:
 I use this milter on low traffic site (~ 30k mails a day) without problems (currently ~ 500k mails in reverse mode and ~ 50k mails in forward mode). But still it is basically quick hack for my current needs and the code is far from being nice and clean.
+
+Contributors
+------------
+
+[vokac](https://github.com/vokac) ([Original author](http://kmlinux.fjfi.cvut.cz/~vokacpet/activities/srs-milter/))<br>
+[emsearcy](https://github.com/emsearcy)<br>
+[Driskell](https://github.com/driskell) &lt;packages at jasonwoods me uk&gt;

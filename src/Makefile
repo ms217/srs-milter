@@ -1,12 +1,19 @@
-BINDIR =	/usr/sbin
-MANDIR =	/usr/man/man8
+MACHINE=$(shell uname -m)
+PREFIX =	/usr
+BINDIR =	$(PREFIX)/sbin
+MANDIR =	$(PREFIX)/man/man8
 #CC =		gcc
+DEBUG =		-g3
 DEFINES =	
 INCDIRS =	
-LIBDIRS =	-L /usr/lib/libmilter
-CFLAGS =	-Wall $(DEFINES) $(INCDIRS)
-LDFLAGS =	-g3 $(LIBDIRS)
-INSTALL =	/usr/bin/install
+LIBMILTER =	$(shell [ -d "$(PREFIX)/lib64/libmilter" ] && echo "-L $(PREFIX)/lib64/libmilter")
+ifeq (, $(LIBMILTER))
+LIBMILTER =	$(shell [ -d "$(PREFIX)/lib/libmilter" ] && echo "-L $(PREFIX)/lib/libmilter")
+endif
+LIBDIRS =	$(LIBMILTER)
+CFLAGS =	-Wall $(DEBUG) $(DEFINES) $(INCDIRS)
+LDFLAGS =	$(DEBUG) $(LIBDIRS)
+INSTALL =	$(PREFIX)/bin/install
 
 all:			srs-filter
 
