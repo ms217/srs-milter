@@ -29,6 +29,7 @@
 #define SS_STATE_NULL             0x00
 #define SS_STATE_INVALID_CONN     0x01
 #define SS_STATE_INVALID_MSG      0x02
+#define SS_STATE_SKIP             0x10
 
 #define MAXBUF 1024
 
@@ -46,6 +47,8 @@ typedef struct {
   char *socket;
   int timeout;
   char **domains;
+  int norewrite_smtpauth;
+  char **norewrite_client_address;
   int spf_check;
   char *spf_heloname;
   union {
@@ -130,6 +133,22 @@ int srs_milter_configure(const char *key, const char *val) {
     config.domains[i] = strdup(val);
     config.domains[i+1] = NULL;
 
+  } else if (strcmp(key, "norewrite-smtpauth") == 0) {
+    config.norewrite_smtpauth = 1;
+
+  } else if (strcmp(key, "norewrite-client-address") == 0) {
+    CHECK_VALUE(key);
+
+    int i = 0;
+    if (!config.norewrite_client_address) {
+      config.norewrite_client_address = (char **) malloc((i+2)*sizeof(char *));
+    } else {
+      while (config.norewrite_client_address[i]) i++;
+      config.norewrite_client_address = (char **) realloc(config.norewrite_client_address, (i+2)*sizeof(char *));
+    }
+    config.norewrite_client_address[i] = strdup(val);
+    config.norewrite_client_address[i+1] = NULL;
+
   } else if (strcmp(key, "srs-domain") == 0) {
     CHECK_VALUE(key);
 
@@ -202,6 +221,7 @@ int srs_milter_configure(const char *key, const char *val) {
   return 0;
 }
 
+
 int srs_milter_load_config(const char *filename) {
   char line[MAXBUF];
   int ret = 0;
@@ -246,6 +266,22 @@ int srs_milter_load_config(const char *filename) {
 
   return ret;
 }
+
+
+int is_in_array(const char *addr, char *array[]) {
+  int i;
+
+  if (!addr)
+    return 0;
+
+  for (i = 0; array[i]; i++) {
+    if (strcasecmp(addr, config.domains[i]) == 0)
+      return 1;
+  }
+
+  return 0;
+}
+
 
 int is_local_addr(const char *addr) {
   int i, r;
@@ -351,8 +387,8 @@ xxfi_srs_milter_connect(SMFICTX* ctx, char *hostname, _SOCK_ADDR *hostaddr) {
   cd->num = ++connections; // this should be done in thread-safe way
 
   if (config.verbose)
-    syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_connect(\"%s\", hostaddr)",
-           cd->num, cd->state, hostname);
+    syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_connect(\"%s\", %p): served by thread %i",
+           cd->num, cd->state, hostname, hostaddr, td->num);
 
   return SMFIS_CONTINUE;
 }
@@ -369,46 +405,13 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
   if (cd->state & SS_STATE_INVALID_CONN)
     return SMFIS_CONTINUE;
 
-  if (config.verbose)
-    syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\")",
-           cd->num, cd->state, argv[0]);
-
-  if (strlen(argv[0]) < 1 || strcmp(argv[0], "<>") == 0 || argv[0][0] != '<' || argv[0][strlen(argv[0])-1] != '>' || !strchr(argv[0], '@')) {
-    cd->state |= SS_STATE_INVALID_MSG;
-    if (config.verbose)
-      syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): skipping \"MAIL FROM: %s\"",
-             cd->num, cd->state, argv[0], argv[0]);
-    return SMFIS_CONTINUE;
-  }
-
-  // Check if this message was delivered to us via SMTP AUTH. We assume we don't rewrite such messages.
-  char *auth_authen = smfi_getsymval(ctx, "{auth_authen}");
-  if(auth_authen) {
-    cd->state |= SS_STATE_INVALID_MSG;
-    if (CONFIG_verbose)
-      syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): skipping SMTP AUTH user: %s",
-             cd->num, cd->state, argv[0], auth_authen);
-    return SMFIS_CONTINUE;
-  }
-
-  // Check if this message was delivered from the local host. We don't rewrite such messages.
-  char *if_addr = smfi_getsymval(ctx, "{if_addr}");
-  if(strcmp(if_addr, "127.0.0.1") == 0 || strcmp(if_addr, "IPv6:::1") == 0) {
-    cd->state |= SS_STATE_INVALID_MSG;
-    if (CONFIG_verbose)
-      syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): skipping message originating from %s",
-             cd->num, cd->state, argv[0], if_addr);
-    return SMFIS_CONTINUE;
-  } else {
-      syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): accepting message originating from %s",
-             cd->num, cd->state, argv[0], if_addr);
-  }
-
-
   // cleanup data structure for new message
   // (there can be more messages send throught one connection,
   // so this structure could be filled by previous message)
   cd->state = SS_STATE_NULL;
+  if (config.verbose)
+    syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\")",
+           cd->num, cd->state, argv[0]);
 
   if (cd->sender) {
     free(cd->sender);
@@ -424,6 +427,15 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
   }
 
   cd->recip_remote = 0;
+
+  // skip messages with null or invalid sender address
+  if (strlen(argv[0]) < 1 || strcmp(argv[0], "<>") == 0 || argv[0][0] != '<' || argv[0][strlen(argv[0])-1] != '>' || !strchr(argv[0], '@')) {
+    cd->state |= SS_STATE_INVALID_MSG;
+    if (config.verbose)
+      syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): skipping \"MAIL FROM: %s\"",
+             cd->num, cd->state, argv[0], argv[0]);
+    return SMFIS_CONTINUE;
+  }
 
   // strore MAIL FROM: address
   cd->sender = (char *) malloc(strlen(argv[0])-1);
@@ -447,7 +459,7 @@ xxfi_srs_milter_envrcpt(SMFICTX* ctx, char** argv) {
   struct srs_milter_connection_data* cd =
           (struct srs_milter_connection_data*) smfi_getpriv(ctx);
 
-  if (cd->state & SS_STATE_INVALID_CONN)
+  if (cd->state & (SS_STATE_INVALID_CONN | SS_STATE_SKIP))
     return SMFIS_CONTINUE;
 
   if (config.verbose)
@@ -507,7 +519,7 @@ xxfi_srs_milter_eom(SMFICTX* ctx) {
   struct srs_milter_connection_data* cd =
           (struct srs_milter_connection_data*) smfi_getpriv(ctx);
 
-  if (cd->state & (SS_STATE_INVALID_CONN | SS_STATE_INVALID_MSG))
+  if (cd->state & (SS_STATE_INVALID_CONN | SS_STATE_INVALID_MSG | SS_STATE_SKIP))
     return SMFIS_CONTINUE;
 
   char *queue_id = smfi_getsymval(ctx, "{i}");
@@ -523,7 +535,22 @@ xxfi_srs_milter_eom(SMFICTX* ctx) {
   // for this particular sender domain
   if (config.forward && !is_local_addr(cd->sender) && cd->recip_remote) {
 
-    if (config.srs_alwaysrewrite || !config.spf_check) {
+    char *auth_authen = smfi_getsymval(ctx, "{auth_authen}");
+    char *if_addr = smfi_getsymval(ctx, "{if_addr}");
+
+    if (config.norewrite_smtpauth && auth_authen) {
+      // configuration exclude messages delivered via SMTP AUTH from rewriting
+      if (config.verbose)
+        syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_eom(): skipping SMTP AUTH user: %s",
+               cd->num, cd->state, auth_authen);
+
+    } else if (if_addr && is_in_array(if_addr, config.norewrite_client_address)) {
+      // configuration exclude this client from rewriting
+      if (config.verbose)
+        syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_eom(): skipping message originating from %s",
+               cd->num, cd->state, if_addr);
+
+    } else if (config.srs_alwaysrewrite || !config.spf_check) {
 
       fix_envfrom = 1;
 
@@ -864,6 +891,12 @@ void usage(char *argv0) {
   printf("  -m, --local-domain\n");
   printf("      all local mail domains for that we accept mail\n");
   printf("      starting domain name with \".\" match also all subdomains\n");
+  printf("  -u, --norewrite-smtpauth\n");
+  printf("      exclude authenticated users from SRS rewriting\n");
+  printf("      NOTE: you almost certainly don't want to enable this option\n");
+  printf("  -z, --norewrite-client-address\n");
+  printf("      exclude smtp client address from SRS rewriting\n");
+  printf("      NOTE: you almost certainly don't want to use this option\n");
   printf("  -o, --srs-domain\n");
   printf("      our SRS domain name\n");
   printf("  -y, --srs-secret\n");
@@ -910,6 +943,8 @@ int main(int argc, char* argv[]) {
     {"forward",                no_argument,       0, 'f'},
     {"reverse",                no_argument,       0, 'r'},
     {"local-domain",           required_argument, 0, 'm'},
+    {"norewrite-smtpauth",     no_argument,       0, 'u'},
+    {"norewrite-client-address",required_argument,0, 'z'},
     {"spf-check",              no_argument,       0, 'k'},
     {"spf-heloname",           required_argument, 0, 'l'},
     {"spf-address",            required_argument, 0, 'a'},
@@ -932,7 +967,7 @@ int main(int argc, char* argv[]) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:kl:a:o:y:Y:wg:i:x:e:",
+    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:uz:kl:a:o:y:Y:wg:i:x:e:",
                     long_options, &option_index);
 
     /* Detect the end of the options. */
@@ -953,7 +988,7 @@ int main(int argc, char* argv[]) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:kl:a:o:y:Y:wg:i:x:e:",
+    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:uz:kl:a:o:y:Y:wg:i:x:e:",
                     long_options, &option_index);
 
     /* Detect the end of the options. */
@@ -1009,6 +1044,14 @@ int main(int argc, char* argv[]) {
 
       case 'm':
         srs_milter_configure("local-domain", optarg);
+        break;
+
+      case 'u':
+        srs_milter_configure("norewrite-smtpauth", NULL);
+        break;
+
+      case 'z':
+        srs_milter_configure("norewrite-client-address", optarg);
         break;
 
       case 'k':
@@ -1213,6 +1256,10 @@ int main(int argc, char* argv[]) {
         syslog(LOG_DEBUG, "config timeout: %i", config.timeout);
       for (i = 0; config.domains && config.domains[i]; i++)
         syslog(LOG_DEBUG, "config local_domain: %s", config.domains[i]);
+      for (i = 0; config.norewrite_client_address && config.norewrite_client_address[i]; i++)
+        syslog(LOG_DEBUG, "config norewrite_client_address: %s", config.norewrite_client_address[i]);
+      if (config.norewrite_smtpauth > 0)
+        syslog(LOG_DEBUG, "config norewrite_smtpauth: %i", config.norewrite_smtpauth);
       if (config.srs_domain)
         syslog(LOG_DEBUG, "config srs_domain: %s", config.srs_domain);
       for (i = 0; config.srs_secrets && config.srs_secrets[i]; i++)
@@ -1278,16 +1325,23 @@ int main(int argc, char* argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  // Free the secrets
+  // free the secrets
   {
     char **s = config.srs_secrets;
     do {
       free(*s);
     } while (*++s != NULL);
   }
-  // Free the secrets
+  // free the domains
   {
     char **s = config.domains;
+    do {
+      free(*s);
+    } while (*++s != NULL);
+  }
+  // free the norewrite_client_address
+  {
+    char **s = config.norewrite_client_address;
     do {
       free(*s);
     } while (*++s != NULL);

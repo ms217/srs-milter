@@ -1,13 +1,13 @@
 Summary:        Milter (mail filter) for SRS
 Name:           srs-milter
 Version:        0.0.2
-Release:        1
+Release:        8
 License:        GPL
 Group:          System Environment/Daemons
 URL:            https://github.com/vokac/srs-milter
 Source0:        %{name}-%{version}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-BuildRequires:  sendmail-devel libsrs2 libspf2
+BuildRequires:  sendmail-devel libsrs2 libspf2-devel
 %if 0%{?rhel} < 6
 Requires:       sendmail
 %else
@@ -30,6 +30,7 @@ Requires(postun): initscripts
 The srs-milter package is an implementation of the SRS standard
 that tries to fix problems caused by SPF in case of forwarded mail
 
+
 %package postfix
 Summary:        Postfix support for srs-milter
 Group:          System Environment/Daemons
@@ -43,6 +44,7 @@ BuildArch:      noarch
 %description postfix
 This package adds support for running srs-milter using a Unix-domain
 socket to communicate with the Postfix MTA.
+
 
 %prep
 %setup -q
@@ -64,13 +66,16 @@ socket to communicate with the Postfix MTA.
 %{__install} -D -m0644 dist/redhat/srs-milter.reverse.conf %{buildroot}%{_sysconfdir}/srs-milter.reverse.conf
 %{__install} -d -m0755 %{buildroot}%{_localstatedir}/lib/srs-milter
 %{__install} -d -m0750 %{buildroot}%{_localstatedir}/run/srs-milter
-%{__install} -d -m0750 %{buildroot}%{_localstatedir}/run/srs-milter/postfix
+%{__install} -d -m0750 %{buildroot}%{_localstatedir}/run/srs-milter-postfix
 %{__install} -D -m0755 src/srs-filter %{buildroot}%{_sbindir}/srs-milter
 #%{__strip} %{buildroot}%{_sbindir}/srs-milter
 
 %{__install} -p -d %{buildroot}%{_sysconfdir}/tmpfiles.d
 cat > %{buildroot}%{_sysconfdir}/tmpfiles.d/%{name}.conf <<'EOF'
 D %{_localstatedir}/run/%{name} 0750 srs-milt srs-milt -
+EOF
+cat > %{buildroot}%{_sysconfdir}/tmpfiles.d/%{name}-postfix.conf <<'EOF'
+D %{_localstatedir}/run/%{name}-postfix 0750 srs-milt postfix -
 EOF
 
 
@@ -113,8 +118,10 @@ fi
 # that.
 #/usr/sbin/usermod -a -G postfix srs-milt || :
 
+
 %clean
 %{__rm} -rf %{buildroot}
+
 
 %files
 %defattr(-,root,root,-)
@@ -135,7 +142,9 @@ fi
 
 %files postfix
 %defattr(-,root,root,-)
-%dir %attr(-,sa-milt,postfix) %{_localstatedir}/run/srs-milter/postfix/
+%config(noreplace) %{_sysconfdir}/tmpfiles.d/%{name}-postfix.conf
+%dir %attr(-,sa-milt,postfix) %{_localstatedir}/run/srs-milter-postfix/
+
 
 %changelog
 * Tue Jan 27 2015 Petr Vokac <vokac@fjfi.cvut.cz> - 0.0.2-1
