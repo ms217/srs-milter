@@ -1326,25 +1326,28 @@ int main(int argc, char* argv[]) {
   }
 
   // free the secrets
-  {
+  if (config.srs_secrets) {
     char **s = config.srs_secrets;
     do {
       free(*s);
     } while (*++s != NULL);
+    free(config.srs_secrets);
   }
   // free the domains
-  {
+  if (config.domains) {
     char **s = config.domains;
     do {
       free(*s);
     } while (*++s != NULL);
+    free(config.domains);
   }
   // free the norewrite_client_address
-  {
+  if (config.norewrite_client_address) {
     char **s = config.norewrite_client_address;
     do {
       free(*s);
     } while (*++s != NULL);
+    free(config.norewrite_client_address);
   }
 
   syslog(LOG_INFO, "exitting");
