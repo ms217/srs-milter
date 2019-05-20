@@ -7,7 +7,7 @@ Group:          System Environment/Daemons
 URL:            https://github.com/vokac/srs-milter
 Source0:        %{name}-%{version}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-BuildRequires:  sendmail-devel libsrs2-devel libspf2-devel
+BuildRequires:  gcc sendmail-devel libsrs2-devel libspf2-devel
 %if 0%{?rhel} < 6
 Requires:       sendmail
 %else
