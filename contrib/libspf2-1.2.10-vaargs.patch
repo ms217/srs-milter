@@ -1,0 +1,18 @@
+diff -NPurBb libspf2-1.2.10.orig/src/include/spf_log.h libspf2-1.2.10/src/include/spf_log.h
+--- libspf2-1.2.10.orig/src/include/spf_log.h	2012-01-28 09:24:47.000000000 +0100
++++ libspf2-1.2.10/src/include/spf_log.h	2015-02-09 09:46:11.062713098 +0100
+@@ -60,10 +60,10 @@
+ 
+ #if defined( __STDC_VERSION__ ) && __STDC_VERSION__ >= 199901L
+ 
+-#define SPF_errorf(format, ... ) SPF_errorx( __FILE__, __LINE__, format, __VA_ARGS__ )
+-#define SPF_warningf(format, ... ) SPF_warningx( __FILE__, __LINE__, format, __VA_ARGS__ )
+-#define SPF_infof(format, ... ) SPF_infox( __FILE__, __LINE__, format, __VA_ARGS__ )
+-#define SPF_debugf(format, ... ) SPF_debugx( __FILE__, __LINE__, format, __VA_ARGS__ )
++#define SPF_errorf(format, ... ) SPF_errorx( __FILE__, __LINE__, format, ##__VA_ARGS__ )
++#define SPF_warningf(format, ... ) SPF_warningx( __FILE__, __LINE__, format, ##__VA_ARGS__ )
++#define SPF_infof(format, ... ) SPF_infox( __FILE__, __LINE__, format, ##__VA_ARGS__ )
++#define SPF_debugf(format, ... ) SPF_debugx( __FILE__, __LINE__, format, ##__VA_ARGS__ )
+ 
+ #elif defined( __GNUC__ )
+ 

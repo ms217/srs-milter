@@ -1,0 +1,11 @@
+--- libspf2-1.2.5/src/libspf2/spf_interpret.c~	2005-02-22 04:41:27.000000000 +0100
++++ libspf2-1.2.5/src/libspf2/spf_interpret.c	2005-10-25 13:40:42.000000000 +0200
+@@ -49,7 +49,7 @@
+ 	SPF_record_t	*spf_record;
+ 	SPF_errcode_t	 err;
+ 	char			*buf;
+-	int				 buflen;
++	size_t				 buflen;
+ 	int				 len;
+ 
+ 	SPF_ASSERT_NOTNULL(spf_response);

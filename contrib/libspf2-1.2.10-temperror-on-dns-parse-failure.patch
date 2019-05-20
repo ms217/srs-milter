@@ -1,0 +1,142 @@
+diff --git a/src/libspf2/spf_dns_resolv.c b/src/libspf2/spf_dns_resolv.c
+index 9dacafe..8a07e6a 100644
+--- a/src/libspf2/spf_dns_resolv.c
++++ b/src/libspf2/spf_dns_resolv.c
+@@ -363,8 +363,6 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 			SPF_debugf("ns_initparse failed: err = %d  %s (%d)",
+ 				err, strerror(errno), errno);
+ 		free(responsebuf);
+-		/* XXX Do we really want to return success with no data
+-		 * on parse failure? */
+ 		spfrr->herrno = NO_RECOVERY;
+ 		return spfrr;
+ 	}
+@@ -382,14 +380,12 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 	}
+ 
+ 
+-	/* FIXME  the error handling from here on is suspect at best */
+ 	for (ns_sect = 0; ns_sect < num_ns_sect; ns_sect++) {
+ 		/* We pass this point if:
+ 		 * - We are the 'answer' section.
+-		 * - We are debugging.
+ 		 * Otherwise, we continue to the next section.
+ 		 */
+-		if (ns_sects[ns_sect].number != ns_s_an && spf_dns_server->debug <= 1)
++		if (ns_sects[ns_sect].number != ns_s_an)
+ 			continue;
+ 
+ 		nrec = ns_msg_count(ns_handle, ns_sects[ns_sect].number);
+@@ -406,8 +402,6 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 					SPF_debugf("ns_parserr failed: err = %d  %s (%d)",
+ 							err, strerror(errno), errno);
+ 				free(responsebuf);
+-				/* XXX Do we really want to return partial data
+-				 * on parse failures? */
+ 				spfrr->herrno = NO_RECOVERY;
+ 				return spfrr;
+ 			}
+@@ -441,15 +435,14 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 			switch (ns_rr_type(rr)) {
+ 				case ns_t_a:
+ 					if (rdlen != 4) {
+-						/* XXX Error handling. */
+ 						free(responsebuf);
++						spfrr->herrno = NO_RECOVERY;
+ 						return spfrr;
+ 					}
+ 					if (SPF_dns_rr_buf_realloc(spfrr, cnt,
+ 								sizeof(spfrr->rr[cnt]->a)) != SPF_E_SUCCESS) {
+ 						free(responsebuf);
+-						/* XXX Do we really want to return partial data
+-						 * on out of memory conditions? */
++						spfrr->herrno = TRY_AGAIN;
+ 						return spfrr;
+ 					}
+ 					memcpy(&spfrr->rr[cnt]->a, rdata, sizeof(spfrr->rr[cnt]->a));
+@@ -458,15 +451,14 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 
+ 				case ns_t_aaaa:
+ 					if (rdlen != 16) {
+-						/* XXX Error handling. */
+ 						free(responsebuf);
++						spfrr->herrno = NO_RECOVERY;
+ 						return spfrr;
+ 					}
+ 					if (SPF_dns_rr_buf_realloc(spfrr, cnt,
+ 								sizeof(spfrr->rr[cnt]->aaaa)) != SPF_E_SUCCESS) {
+ 						free(responsebuf);
+-						/* XXX Do we really want to return partial data
+-						 * on out of memory conditions? */
++						spfrr->herrno = TRY_AGAIN;
+ 						return spfrr;
+ 					}
+ 					memcpy(&spfrr->rr[cnt]->aaaa, rdata, sizeof(spfrr->rr[cnt]->aaaa));
+@@ -482,8 +474,8 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 
+ 				case ns_t_mx:
+ 					if (rdlen < NS_INT16SZ) {
+-						/* XXX Error handling. */
+ 						free(responsebuf);
++						spfrr->herrno = NO_RECOVERY;
+ 						return spfrr;
+ 					}
+ 					err = ns_name_uncompress(responsebuf,
+@@ -495,16 +487,14 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 							SPF_debugf("ns_name_uncompress failed: err = %d  %s (%d)",
+ 									err, strerror(errno), errno);
+ 						free(responsebuf);
+-						/* XXX Do we really want to return partial data
+-						 * on parse error? */
++						spfrr->herrno = NO_RECOVERY;
+ 						return spfrr;
+ 					}
+ 
+ 					if (SPF_dns_rr_buf_realloc(spfrr, cnt,
+ 									strlen(name_buf) + 1 ) != SPF_E_SUCCESS) {
+ 						free(responsebuf);
+-						/* XXX Do we really want to return partial data
+-						 * on out of memory conditions? */
++						spfrr->herrno = TRY_AGAIN;
+ 						return spfrr;
+ 					}
+ 					strcpy(spfrr->rr[cnt]->mx, name_buf);
+@@ -521,8 +511,7 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 						 * length byte, which we do not copy. */
+ 						if (SPF_dns_rr_buf_realloc(spfrr, cnt, rdlen) != SPF_E_SUCCESS) {
+ 							free(responsebuf);
+-							/* XXX Do we really want to return partial data
+-							 * on out of memory conditions? */
++							spfrr->herrno = TRY_AGAIN;
+ 							return spfrr;
+ 						}
+ 
+@@ -551,8 +540,7 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 					else {
+ 						if (SPF_dns_rr_buf_realloc(spfrr, cnt, 1) != SPF_E_SUCCESS) {
+ 							free(responsebuf);
+-							/* XXX Do we really want to return partial data
+-							 * on out of memory conditions? */
++							spfrr->herrno = TRY_AGAIN;
+ 							return spfrr;
+ 						}
+ 						spfrr->rr[cnt]->txt[0] = '\0';
+@@ -571,16 +559,14 @@ SPF_dns_resolv_lookup(SPF_dns_server_t *spf_dns_server,
+ 							SPF_debugf("ns_name_uncompress failed: err = %d  %s (%d)",
+ 									err, strerror(errno), errno);
+ 						free(responsebuf);
+-						/* XXX Do we really want to return partial data
+-						 * on parse error? */
++						spfrr->herrno = NO_RECOVERY;
+ 						return spfrr;
+ 					}
+ 
+ 					if (SPF_dns_rr_buf_realloc(spfrr, cnt,
+ 									strlen(name_buf) + 1) != SPF_E_SUCCESS) {
+ 						free(responsebuf);
+-						/* XXX Do we really want to return partial data
+-						 * on out of memory conditions? */
++						spfrr->herrno = TRY_AGAIN;
+ 						return spfrr;
+ 					}
+ 					strcpy(spfrr->rr[cnt]->ptr, name_buf);
