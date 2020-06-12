@@ -62,6 +62,7 @@ typedef struct {
   int srs_hashlength;
   int srs_hashmin;
   int srs_maxage;
+  int srs_onlyonfailrewrite;
   char srs_separator;
 } config_t;
 
@@ -194,6 +195,11 @@ int srs_milter_configure(const char *key, const char *val) {
 
   } else if (strcmp(key, "spf-check") == 0) {
     config.spf_check = 1;
+
+  } else if (strcmp(key, "srs-onlyonfailrewrite") == 0) {
+    CHECK_VALUE(key);
+
+    config.srs_onlyonfailrewrite = atoi(val);
 
   } else if (strcmp(key, "spf-heloname") == 0) {
     CHECK_VALUE(key);
@@ -622,8 +628,18 @@ xxfi_srs_milter_eom(SMFICTX* ctx) {
           // cause some problems/mail rejection, so right now I'm taking
           // conservative approach for SRS "MAIL FROM:" rewriting)
           //if (!(status == SPF_RESULT_PASS || status == SPF_RESULT_NEUTRAL))
-          if (spf_result == SPF_RESULT_FAIL || spf_result == SPF_RESULT_SOFTFAIL)
-            fix_envfrom = 1;
+          if (config.srs_onlyonfailrewrite == 0) {
+	          if (spf_result == SPF_RESULT_FAIL || spf_result == SPF_RESULT_SOFTFAIL)
+	            fix_envfrom = 1;
+		    syslog(LOG_DEBUG, "conn# %d[%i][%s] - xxfi_srs_milter_eom(): rewrite only on fail = %i",
+		           cd->num, cd->state, queue_id, config.srs_onlyonfailrewrite);
+
+          } else if (config.srs_onlyonfailrewrite == 1) {
+                  if (spf_result == SPF_RESULT_FAIL)
+                    fix_envfrom = 1;
+		    syslog(LOG_DEBUG, "conn# %d[%i][%s] - xxfi_srs_milter_eom(): rewrite only on fail = %i",
+		           cd->num, cd->state, queue_id, config.srs_onlyonfailrewrite);
+	  }
         } else {
           if (config.verbose)
             syslog(LOG_DEBUG, "conn# %d[%i][%s][%i] - xxfi_srs_milter_eom(): spf(%s, %s, %s) NULL response?!",
@@ -906,6 +922,8 @@ void usage(char *argv0) {
   printf("  -Y, --srs-secret-file\n");
   printf("      file containing secrets for SRS hashing algorithm\n");
   printf("  -w, --srs-alwaysrewrite\n");
+  printf("  -F  --srs-onlyonfailrewrite\n");
+  printf("      Only rewrite on fail instead of softfail & fail\n");
   printf("  -g, --srs-hashlength\n");
   printf("  -i, --srs-hashmin\n");
   printf("  -x, --srs-maxage\n");
@@ -951,6 +969,7 @@ int main(int argc, char* argv[]) {
     {"srs-domain",             required_argument, 0, 'o'},
     {"srs-secret",             required_argument, 0, 'y'},
     {"srs-secret-file",        required_argument, 0, 'Y'},
+    {"srs-onlyonfailrewrite",  required_argument, 0, 'F'},
     {"srs-alwaysrewrite",      no_argument,       0, 'w'},
     {"srs-hashlength",         required_argument, 0, 'g'},
     {"srs-hashmin",            required_argument, 0, 'i'},
@@ -967,7 +986,7 @@ int main(int argc, char* argv[]) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:uz:kl:a:o:y:Y:wg:i:x:e:",
+    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:uz:kl:a:o:y:Y:F:wg:i:x:e:",
                     long_options, &option_index);
 
     /* Detect the end of the options. */
@@ -988,7 +1007,7 @@ int main(int argc, char* argv[]) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:uz:kl:a:o:y:Y:wg:i:x:e:",
+    c = getopt_long(argc, argv, "hvdc:P:s:t:frm:uz:kl:a:o:y:Y:F:wg:i:x:e:",
                     long_options, &option_index);
 
     /* Detect the end of the options. */
@@ -1081,6 +1100,9 @@ int main(int argc, char* argv[]) {
       case 'w':
         srs_milter_configure("srs-alwaysrewrite", NULL);
         break;
+
+      case 'F':
+	srs_milter_configure("srs-onlyonfailrewrite", NULL);
 
       case 'g':
         srs_milter_configure("srs-hashlength", optarg);
@@ -1266,6 +1288,8 @@ int main(int argc, char* argv[]) {
         syslog(LOG_DEBUG, "config srs_secret: %s", config.srs_secrets[i]);
       if (config.srs_alwaysrewrite > 0)
         syslog(LOG_DEBUG, "config srs_alwaysrewrite: %i", config.srs_alwaysrewrite);
+      if (config.srs_onlyonfailrewrite > 0)
+	syslog(LOG_DEBUG, "config srs_onlyonfailrewrite: %i", config.srs_onlyonfailrewrite);
       if (config.srs_hashlength > 0)
         syslog(LOG_DEBUG, "config srs_hashlength: %i", config.srs_hashlength);
       if (config.srs_hashmin > 0)
